@@ -14,7 +14,7 @@ int main() {
     string input;
     
     if (!testflag) {
-        cout << "$ ";
+        cout << "$ "; 
     }
     
     if (!getline(cin, input)) {
