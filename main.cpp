@@ -1,14 +1,12 @@
 #include <iostream>
 #include <string>
+#include <fstream>
 
 using namespace std;
 
 const bool testflag = true;
-
-void debug(const string& command) {
-    string text = command.substr(5);
-    cout << text << endl;
-}
+string file;
+ofstream outFile;
 
 string trim(const string& str) {
     size_t start = str.find_first_not_of(" \t\n\r");
@@ -19,10 +17,23 @@ string trim(const string& str) {
     return str.substr(start, end - start + 1);
 }
 
+void debug(const string& command) {
+    string text = command.substr(5);
+    cout << text << endl;
+}
+
+void history(const string& command) {
+    if (!command.empty() && command != "\\q" && outFile.is_open()) {
+        outFile << command << endl;
+        outFile.flush();
+    }
+}
 
 int main() {
+    file = ".kubsh_history";
+    outFile.open(file, ios::app);
+    
     string input;
-    string trinput = trim(input);
     
     while(true) {
         if (!testflag) {
@@ -34,16 +45,35 @@ int main() {
             break;
         }
         
-        if (input.find("debug") == 0) {
-            debug(input);
-            if (testflag) break;
-        }
+        string trinput = trim(input);
         
         if (trinput.empty()) {
             continue;
         }
+        
+        history(trinput);
+        
         if (trinput == "\\q") {
-             break;
+            break;
         }
+        else if (trinput.find("debug") == 0) {
+            debug(trinput);
+            if (testflag) break;
+        }
+        else if (trinput.find("echo") == 0) {
+            debug(trinput);
+            if (testflag) break;
+        }
+        else {
+            cout << trinput << ": command not found" << endl;
+            if (testflag) break;
+        }
+    }
+    
+    if (outFile.is_open()) {
+        outFile.close();
+    }
+    
     return 0;
 }
+
