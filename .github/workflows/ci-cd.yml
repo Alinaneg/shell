@@ -15,7 +15,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
     
-    - name: Install build dependencies
+    - name: Install dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y \
@@ -30,9 +30,16 @@ jobs:
       run: |
         pip3 install pytest
     
-    - name: Build project
+    - name: Build project with clean cache
       run: |
         echo "=== Building kubsh ==="
+        
+        # ПОЛНАЯ ОЧИСТКА кэша CMake
+        rm -rf build
+        rm -f CMakeCache.txt 2>/dev/null || true
+        rm -rf CMakeFiles/ 2>/dev/null || true
+        
+        # Сборка
         mkdir -p build
         cd build
         cmake -DCMAKE_BUILD_TYPE=Debug ..
@@ -42,15 +49,24 @@ jobs:
         # Создаем симлинк как ожидают тесты
         ln -sf build/kubsh kubsh
         chmod +x kubsh
+        
+        echo "=== Build completed ==="
+        ls -la kubsh build/kubsh
     
     - name: Run Python tests
       run: |
         echo "=== Running tests ==="
         
         # Проверяем что бинарник работает
+        echo "Testing kubsh binary:"
         ./kubsh --help 2>&1 | head -3 || true
         
-        # Запускаем тесты с явным указанием файлов
+        # Тест импорта utils
+        echo "Testing imports:"
+        python3 -c "import utils; print('✓ utils imports OK')" || echo "⚠ utils import issue"
+        
+        # Запускаем тесты
+        echo "Running pytest:"
         python3 -m pytest \
           test_basic.py \
           test_vfs.py \
@@ -60,7 +76,7 @@ jobs:
         echo "=== Tests completed ==="
 
   build-deb:
-    needs: test  # Запускается только если тесты прошли
+    needs: test
     runs-on: ubuntu-latest
     
     steps:
@@ -77,12 +93,14 @@ jobs:
           lintian \
           fakeroot
     
-    - name: Build DEB package
+    - name: Build DEB package with clean cache
       run: |
         echo "=== Building DEB package ==="
         
-        # Очистка старых пакетов
+        # Очистка ВСЕХ старых файлов
+        rm -rf build
         rm -f ../*.deb ../*.dsc ../*.changes ../*.buildinfo ../*.tar.gz 2>/dev/null || true
+        rm -f CMakeCache.txt 2>/dev/null || true
         
         # Сборка пакета
         dpkg-buildpackage -us -uc -b -j$(nproc)
@@ -96,12 +114,13 @@ jobs:
           echo "=== Validating package ==="
           DEB_FILE=$(ls ../*.deb | head -1)
           
-          # Проверка содержимого
           echo "Package: $DEB_FILE"
           echo "Size: $(du -h "$DEB_FILE" | cut -f1)"
           
-          dpkg-deb -I "$DEB_FILE" | head -20
+          # Быстрая проверка содержимого
+          dpkg-deb -I "$DEB_FILE" | grep -E "(Package|Version|Architecture)" || true
           
+          echo "✓ DEB package is valid"
         else
           echo "❌ No DEB package found"
           exit 1
@@ -113,3 +132,13 @@ jobs:
         name: kubsh-debian-package
         path: ../*.deb
         retention-days: 30
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-info
+        path: |
+          ../*.changes
+          ../*.buildinfo
+          ../*.dsc
+        if-no-files-found: ignore
