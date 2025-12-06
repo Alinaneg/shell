@@ -1,19 +1,53 @@
-name: VFS Tests
+name: CI/CD
 
 on: [push, pull_request]
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Run Docker tests
+      run: |
+        docker build -t vfs-test .
+        docker run --rm --privileged vfs-test
+        
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
     
     steps:
     - uses: actions/checkout@v4
     
-    - name: Build Docker image
-      run: docker build -t vfs-test .
-      
-    - name: Run tests
+    - name: Build DEB package
       run: |
-        docker run --rm \
-          --privileged \
-          vfs-test
+        sudo apt update
+        sudo apt install -y g++ make libreadline-dev devscripts debhelper
+        
+        mkdir -p kubsh-package/usr/local/bin
+        mkdir -p kubsh-package/DEBIAN
+        
+        g++ -std=c++11 -o kubsh-package/usr/local/bin/kubsh src/main.cpp -lreadline
+        
+        # Создаем control файл
+        cat > kubsh-package/DEBIAN/control << EOF
+        Package: kubsh
+        Version: 1.0-${{ github.sha:0:8 }}
+        Section: utils
+        Priority: optional
+        Architecture: amd64
+        Maintainer: CI Builder <ci@example.com>
+        Description: Custom shell with VFS
+         Shell with virtual filesystem features.
+        EOF
+        
+        # Собираем пакет
+        dpkg-deb --build kubsh-package kubsh.deb
+        
+    - name: Upload DEB package
+      uses: actions/upload-artifact@v4
+      with:
+        name: kubsh-deb
+        path: kubsh.deb
