@@ -1,87 +1,40 @@
-name: CI/CD Pipeline
+name: VFS Tests with Docker
 
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
 
 jobs:
-  test:
+  test-in-docker:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
     
-    - name: Install dependencies
+    - name: Build Docker image
       run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          cmake \
-          g++ \
-          make \
-          python3 \
-          python3-pip \
-          python3-venv
-    
-    - name: Install Python test dependencies
-      run: |
-        pip3 install pytest
-    
-    - name: Setup VFS directory
-      run: |
-        # КРИТИЧНО: Создаем /opt/users с правами
-        sudo mkdir -p /opt/users
-        sudo chmod 777 /opt/users
-        echo "=== VFS directory created ==="
-        ls -la /opt/
-    
-    - name: Build project
-      run: |
-        echo "=== Building kubsh ==="
-        rm -rf build
-        mkdir -p build
-        cd build
-        cmake -DCMAKE_BUILD_TYPE=Debug ..
-        make -j$(nproc)
-        cd ..
-        ln -sf build/kubsh kubsh
-        chmod +x kubsh
-    
-    - name: Run Python tests
-      run: |
-        echo "=== Running tests ==="
+        docker build -t vfs-test .
         
-        # Проверяем что папка существует и доступна
-        ls -la /opt/users
-        touch /opt/users/test.txt 2>/dev/null && echo "✓ Can write to /opt/users" || echo "⚠ Cannot write to /opt/users"
+    - name: Run tests with privileges
+      run: |
+        docker run --rm \
+          --privileged \
+          --cap-add=SYS_ADMIN \
+          --security-opt seccomp=unconfined \
+          -v /dev/fuse:/dev/fuse \
+          vfs-test
         
-        # Запускаем тесты
-        python3 -m pytest -v --tb=short
-  
-  build-deb:
-    needs: test
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Install packaging dependencies
+    - name: Debug on failure
+      if: failure()
       run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          devscripts \
-          debhelper \
-          build-essential \
-          lintian \
-          fakeroot
-    
-    - name: Build DEB package
-      run: |
-        echo "=== Building DEB package ==="
-        rm -f ../*.deb ../*.dsc ../*.changes ../*.buildinfo ../*.tar.gz 2>/dev/null || true
-        dpkg-buildpackage -us -uc -b -j$(nproc)
-    
-    - name: Upload DEB package
-      uses: actions/upload-artifact@v4
-      with:
-        name: kubsh-deb
-        path: ../*.deb
+        # Создаем контейнер для отладки
+        docker run -d --name debug-container \
+          --privileged \
+          --cap-add=SYS_ADMIN \
+          vfs-test tail -f /dev/null
+        docker exec debug-container ls -la /opt/users/
+        docker exec debug-container cat /etc/passwd | tail -20
+        docker stop debug-container
+        docker rm debug-container
