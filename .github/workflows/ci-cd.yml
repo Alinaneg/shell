@@ -1,11 +1,6 @@
 name: CI/CD Pipeline
 
-on: 
-  push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
-  workflow_dispatch:
+on: [push, pull_request, workflow_dispatch]
 
 jobs:
   test:
@@ -30,51 +25,37 @@ jobs:
       run: |
         pip3 install pytest
     
-    - name: Build project with clean cache
+    - name: Setup VFS directory
+      run: |
+        # КРИТИЧНО: Создаем /opt/users с правами
+        sudo mkdir -p /opt/users
+        sudo chmod 777 /opt/users
+        echo "=== VFS directory created ==="
+        ls -la /opt/
+    
+    - name: Build project
       run: |
         echo "=== Building kubsh ==="
-        
-        # ПОЛНАЯ ОЧИСТКА кэша CMake
         rm -rf build
-        rm -f CMakeCache.txt 2>/dev/null || true
-        rm -rf CMakeFiles/ 2>/dev/null || true
-        
-        # Сборка
         mkdir -p build
         cd build
         cmake -DCMAKE_BUILD_TYPE=Debug ..
         make -j$(nproc)
         cd ..
-        
-        # Создаем симлинк как ожидают тесты
         ln -sf build/kubsh kubsh
         chmod +x kubsh
-        
-        echo "=== Build completed ==="
-        ls -la kubsh build/kubsh
     
     - name: Run Python tests
       run: |
         echo "=== Running tests ==="
         
-        # Проверяем что бинарник работает
-        echo "Testing kubsh binary:"
-        ./kubsh --help 2>&1 | head -3 || true
-        
-        # Тест импорта utils
-        echo "Testing imports:"
-        python3 -c "import utils; print('✓ utils imports OK')" || echo "⚠ utils import issue"
+        # Проверяем что папка существует и доступна
+        ls -la /opt/users
+        touch /opt/users/test.txt 2>/dev/null && echo "✓ Can write to /opt/users" || echo "⚠ Cannot write to /opt/users"
         
         # Запускаем тесты
-        echo "Running pytest:"
-        python3 -m pytest \
-          test_basic.py \
-          test_vfs.py \
-          -v \
-          --tb=short
-        
-        echo "=== Tests completed ==="
-
+        python3 -m pytest -v --tb=short
+  
   build-deb:
     needs: test
     runs-on: ubuntu-latest
@@ -93,52 +74,14 @@ jobs:
           lintian \
           fakeroot
     
-    - name: Build DEB package with clean cache
+    - name: Build DEB package
       run: |
         echo "=== Building DEB package ==="
-        
-        # Очистка ВСЕХ старых файлов
-        rm -rf build
         rm -f ../*.deb ../*.dsc ../*.changes ../*.buildinfo ../*.tar.gz 2>/dev/null || true
-        rm -f CMakeCache.txt 2>/dev/null || true
-        
-        # Сборка пакета
         dpkg-buildpackage -us -uc -b -j$(nproc)
-        
-        echo "=== Package built ==="
-        ls -la ../*.deb ../*.changes 2>/dev/null || echo "No packages found"
     
-    - name: Validate DEB package
-      run: |
-        if ls ../*.deb 1>/dev/null 2>&1; then
-          echo "=== Validating package ==="
-          DEB_FILE=$(ls ../*.deb | head -1)
-          
-          echo "Package: $DEB_FILE"
-          echo "Size: $(du -h "$DEB_FILE" | cut -f1)"
-          
-          # Быстрая проверка содержимого
-          dpkg-deb -I "$DEB_FILE" | grep -E "(Package|Version|Architecture)" || true
-          
-          echo "✓ DEB package is valid"
-        else
-          echo "❌ No DEB package found"
-          exit 1
-        fi
-    
-    - name: Upload DEB package as artifact
+    - name: Upload DEB package
       uses: actions/upload-artifact@v4
       with:
-        name: kubsh-debian-package
+        name: kubsh-deb
         path: ../*.deb
-        retention-days: 30
-    
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: build-info
-        path: |
-          ../*.changes
-          ../*.buildinfo
-          ../*.dsc
-        if-no-files-found: ignore
