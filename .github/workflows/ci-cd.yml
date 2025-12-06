@@ -31,19 +31,16 @@ jobs:
         
         g++ -std=c++11 -o kubsh-package/usr/local/bin/kubsh src/main.cpp -lreadline
         
-        # Создаем control файл
         cat > kubsh-package/DEBIAN/control << EOF
         Package: kubsh
-        Version: 1.0-${{ github.sha:0:8 }}
+        Version: 1.0
         Section: utils
         Priority: optional
         Architecture: amd64
-        Maintainer: CI Builder <ci@example.com>
+        Maintainer: CI Builder
         Description: Custom shell with VFS
-         Shell with virtual filesystem features.
         EOF
         
-        # Собираем пакет
         dpkg-deb --build kubsh-package kubsh.deb
         
     - name: Upload DEB package
