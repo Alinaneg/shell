@@ -1,11 +1,15 @@
-cmake_minimum_required(VERSION 3.13)
+cmake_minimum_required(VERSION 3.10)
+project(kubsh VERSION 1.0.0 LANGUAGES CXX)
 
-project(shell-starter-cpp)
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-file(GLOB_RECURSE SOURCE_FILES src/*.cpp src/*.hpp)
+# ФОРСИРУЕМ /usr как префикс
+set(CMAKE_INSTALL_PREFIX "/usr" CACHE PATH "Install prefix" FORCE)
 
-set(CMAKE_CXX_STANDARD 23) # Enable the C++23 standard
+add_executable(kubsh src/main.cpp)
 
-add_executable(shell ${SOURCE_FILES})
+target_compile_options(kubsh PRIVATE -Wall -Wextra -pthread)
+target_link_libraries(kubsh pthread)
 
-target_link_libraries(shell PRIVATE readline)
+install(TARGETS kubsh DESTINATION bin)

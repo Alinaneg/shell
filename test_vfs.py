@@ -26,6 +26,8 @@ def test_vfs_users(kubsh, users, vfs):
 def test_vfs_add_user(kubsh, vfs):
     username = random_string().lower()
     (vfs / username).mkdir(parents=True, exist_ok=True)
+    import time
+    time.sleep(0.5)
     user = None
     with open("/etc/passwd", "r") as f:
         for line in f:

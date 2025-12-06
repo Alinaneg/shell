@@ -7,7 +7,7 @@ import pytest
 from utils import debug
 
 # PROGRAM = ["../shell/build/kubsh"]
-PROGRAM = ["kubsh"]
+PROGRAM = ["./kubsh"]
 
 
 @pytest.fixture(scope="session", autouse=True)
