@@ -1,48 +1,115 @@
-name: CI/CD
+name: CI/CD Pipeline
 
-on: [push, pull_request, workflow_dispatch]
+on: 
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
     
-    - name: Install deps
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install build dependencies
       run: |
-        sudo apt update
-        sudo apt install -y cmake g++ make python3 python3-pip
+        sudo apt-get update
+        sudo apt-get install -y \
+          cmake \
+          g++ \
+          make \
+          python3 \
+          python3-pip \
+          python3-venv
+    
+    - name: Install Python test dependencies
+      run: |
         pip3 install pytest
     
-    - name: Build and test
+    - name: Build project
       run: |
-        # Build
+        echo "=== Building kubsh ==="
         mkdir -p build
-        cd build && cmake .. && make
-        ln -s build/kubsh kubsh
+        cd build
+        cmake -DCMAKE_BUILD_TYPE=Debug ..
+        make -j$(nproc)
+        cd ..
         
-        # Set PYTHONPATH for imports
-        export PYTHONPATH=$PYTHONPATH:$GITHUB_WORKSPACE
-        echo "PYTHONPATH set to: $PYTHONPATH"
-        
-        # Test import
-        python3 -c "import utils; print('✓ utils imports OK')" || echo "⚠ utils import failed"
-        
-        # Run tests
-        python3 -m pytest test_basic.py test_vfs.py -v
-  
-  build-deb:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
+        # Создаем симлинк как ожидают тесты
+        ln -sf build/kubsh kubsh
+        chmod +x kubsh
     
-    - name: Build DEB
+    - name: Run Python tests
       run: |
-        sudo apt install -y devscripts debhelper
-        dpkg-buildpackage -us -uc -b
+        echo "=== Running tests ==="
+        
+        # Проверяем что бинарник работает
+        ./kubsh --help 2>&1 | head -3 || true
+        
+        # Запускаем тесты с явным указанием файлов
+        python3 -m pytest \
+          test_basic.py \
+          test_vfs.py \
+          -v \
+          --tb=short
+        
+        echo "=== Tests completed ==="
+
+  build-deb:
+    needs: test  # Запускается только если тесты прошли
+    runs-on: ubuntu-latest
     
-    - uses: actions/upload-artifact@v4
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install packaging dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          devscripts \
+          debhelper \
+          build-essential \
+          lintian \
+          fakeroot
+    
+    - name: Build DEB package
+      run: |
+        echo "=== Building DEB package ==="
+        
+        # Очистка старых пакетов
+        rm -f ../*.deb ../*.dsc ../*.changes ../*.buildinfo ../*.tar.gz 2>/dev/null || true
+        
+        # Сборка пакета
+        dpkg-buildpackage -us -uc -b -j$(nproc)
+        
+        echo "=== Package built ==="
+        ls -la ../*.deb ../*.changes 2>/dev/null || echo "No packages found"
+    
+    - name: Validate DEB package
+      run: |
+        if ls ../*.deb 1>/dev/null 2>&1; then
+          echo "=== Validating package ==="
+          DEB_FILE=$(ls ../*.deb | head -1)
+          
+          # Проверка содержимого
+          echo "Package: $DEB_FILE"
+          echo "Size: $(du -h "$DEB_FILE" | cut -f1)"
+          
+          dpkg-deb -I "$DEB_FILE" | head -20
+          
+        else
+          echo "❌ No DEB package found"
+          exit 1
+        fi
+    
+    - name: Upload DEB package as artifact
+      uses: actions/upload-artifact@v4
       with:
-        name: kubsh-deb
+        name: kubsh-debian-package
         path: ../*.deb
+        retention-days: 30
