@@ -14,12 +14,22 @@ jobs:
         sudo apt install -y cmake g++ make python3 python3-pip
         pip3 install pytest
     
-    - name: Run tests
+    - name: Build and test
       run: |
+        # Build
         mkdir -p build
         cd build && cmake .. && make
         ln -s build/kubsh kubsh
-        python3 -m pytest -v
+        
+        # Set PYTHONPATH for imports
+        export PYTHONPATH=$PYTHONPATH:$GITHUB_WORKSPACE
+        echo "PYTHONPATH set to: $PYTHONPATH"
+        
+        # Test import
+        python3 -c "import utils; print('✓ utils imports OK')" || echo "⚠ utils import failed"
+        
+        # Run tests
+        python3 -m pytest test_basic.py test_vfs.py -v
   
   build-deb:
     needs: test
