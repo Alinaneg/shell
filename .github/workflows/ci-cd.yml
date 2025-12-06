@@ -1,40 +1,19 @@
-name: VFS Tests with Docker
+name: VFS Tests
 
-on:
-  push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
+on: [push, pull_request]
 
 jobs:
-  test-in-docker:
+  test:
     runs-on: ubuntu-latest
     
     steps:
     - uses: actions/checkout@v4
     
     - name: Build Docker image
-      run: |
-        docker build -t vfs-test .
-        
-    - name: Run tests with privileges
+      run: docker build -t vfs-test .
+      
+    - name: Run tests
       run: |
         docker run --rm \
           --privileged \
-          --cap-add=SYS_ADMIN \
-          --security-opt seccomp=unconfined \
-          -v /dev/fuse:/dev/fuse \
           vfs-test
-        
-    - name: Debug on failure
-      if: failure()
-      run: |
-        # Создаем контейнер для отладки
-        docker run -d --name debug-container \
-          --privileged \
-          --cap-add=SYS_ADMIN \
-          vfs-test tail -f /dev/null
-        docker exec debug-container ls -la /opt/users/
-        docker exec debug-container cat /etc/passwd | tail -20
-        docker stop debug-container
-        docker rm debug-container
