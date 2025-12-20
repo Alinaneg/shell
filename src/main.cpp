@@ -369,17 +369,40 @@ int main() {
             if (testflag) exit(0);
         }
         else if (trinput.find("cat ") == 0) {
-            // Убираем "cat " и запускаем команду
-            string real_cmd = trinput.substr(4);
-            real_cmd = trim(real_cmd);
-            
-            if (!real_cmd.empty()) {
-                execute(real_cmd);
-            }
+            execute(trinput);
             if (testflag) exit(0);
         }
         else {
-            cout << trinput << ": command not found" << endl;
+            // Пробуем выполнить команду через execute
+            // Если не получилось - command not found
+            vector<string> args = split(trinput, ' ');
+            if (args.empty()) continue;
+            
+            vector<char*> c_args;
+            for (auto& arg : args) {
+                c_args.push_back(const_cast<char*>(arg.c_str()));
+            }
+            c_args.push_back(nullptr);
+            
+            pid_t pid = fork();
+            if (pid == 0) {
+                // Дочерний процесс
+                execvp(c_args[0], c_args.data());
+                // Если дошли сюда - команда не найдена
+                exit(1);
+            } else if (pid > 0) {
+                int status;
+                waitpid(pid, &status, 0);
+                
+                // Проверяем успешность выполнения
+                if (WIFEXITED(status)) {
+                    if (WEXITSTATUS(status) == 1) {
+                        // Код 1 = execvp не нашел команду
+                        cout << trinput << ": command not found" << endl;
+                    }
+                    // Иначе команда выполнилась (даже если с ошибкой)
+                }
+            }
             if (testflag) exit(0);
         }
     }
