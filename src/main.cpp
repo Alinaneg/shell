@@ -358,11 +358,45 @@ int main() {
         else if (trinput.find("\\e") == 0) {
             env(trinput);
             if (testflag) exit(0);
+        }.
+        
+        if (trinput == "\\q") {
+            break;
         }
-        else if (trinput.find("cat") == 0) {
-            execute(trinput);
+        else if (trinput.find("debug") == 0) {
+            debug(trinput);
             if (testflag) exit(0);
         }
+        else if (trinput.find("\\e") == 0) {
+            env(trinput);
+            if (testflag) exit(0);
+        }
+        else if (trinput.find("\\l") == 0) {
+            vector<string> parts = split(trinput, ' ');
+            if (parts.size() >= 2) {
+                list_part(parts[1]);
+            } else {
+                cout << "Usage: \\l <device>" << endl;
+            }
+            if (testflag) exit(0);
+        }
+        else if (trinput.find("cat ") == 0) {  // ИСПРАВЛЕННЫЙ БЛОК
+            // Убираем "cat " и запускаем команду
+            string real_cmd = trinput.substr(4);
+            real_cmd = trim(real_cmd);
+            
+            if (!real_cmd.empty()) {
+                execute(real_cmd);  // Используем существующую функцию execute
+            }
+            if (testflag) exit(0);
+        }
+        else {
+            cout << trinput << ": command not found" << endl;
+            if (testflag) exit(0);
+        }
+    
+    
+    // ... остальной код ...
         else if (trinput.find("\\l") == 0) {
             vector<string> parts = split(trinput, ' ');
             if (parts.size() >= 2) {
